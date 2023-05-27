@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Database
+database.db
+
+# Virtual environments
+venv/
+env/
+.idea/
+
+# IDEs and editors
+*.sublime-workspace
+*.iml
+.idea
+
+# Miscellaneous
+.DS_Store
+Thumbs.db
