@@ -14,6 +14,7 @@ class VideoStatus(enum.Enum):
     FAILED = 'Failed'
     DELETED = 'Deleted'
     COMPLETE = 'Complete'
+    EXCLUDED = "Excluded"
 
 
 class Retention(enum.Enum):
@@ -33,7 +34,7 @@ class Video(Base):
     __tablename__ = 'videos'
     id = Column(Integer, primary_key=True)
     subscription_id = Column(Integer, ForeignKey('subscriptions.id'))
-    url = Column(String)
+    url = Column(String, unique=True)
     title = Column(String)
     status = Column(Enum(VideoStatus))
     subscription = relationship('Subscription', back_populates='videos')
@@ -52,7 +53,7 @@ class Subscription(Base):
     __tablename__ = 'subscriptions'
     id = Column(Integer, primary_key=True)
     title = Column(String)
-    url = Column(String)
+    url = Column(String, unique=True)
     rss_feed_url = Column(String)
     last_queried = Column(DateTime)
     videos = relationship('Video', back_populates='subscription')

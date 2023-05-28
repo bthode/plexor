@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 from typing import List
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 
-import obtain_feed_url
+import obtain_channel_metadata
 from model import Base, VideoStatus, Setting, Policy, Retention
 from model import Video, Subscription
 
@@ -20,12 +20,12 @@ class SubscriptionManager:
         Retention.DATE_BASED: delete_by_date,
     }
 
-    def __init__(self) -> None:
+    def __init__(self, database_file) -> None:
         """Initialize the SubscriptionManager with a database engine."""
         self.subscriptions = set()
 
         # Create an engine to connect to the database
-        self.engine = create_engine('sqlite:///database.db')
+        self.engine = create_engine('sqlite:///' + database_file)
 
         # Create a session
         self.Session = sessionmaker(bind=self.engine)
@@ -35,36 +35,56 @@ class SubscriptionManager:
     def add_subscription(self, subscription: Subscription) -> None:
         self.session.add(subscription)
         self.session.commit()
-        print(f"Adding Subscription for {subscription.title}")
+        print(f"Adding Subscription for {subscription.url}")
         pass
 
-    def subscription_with_missing_rss_feed_url(self) -> List[Subscription]:
-        return self.session.query(Subscription).filter(Subscription.rss_feed_url.is_(None)).all()
+    def subscription_with_missing_metadata(self) -> List[Subscription]:
+        return self.session.query(Subscription).filter(
+            or_(Subscription.rss_feed_url == '', Subscription.rss_feed_url.is_(None), Subscription.title == '',
+                Subscription.title.is_(None))).all()
         pass
 
-    def update_subscription_rss_feed(self):
-        subscriptions = self.subscription_with_missing_rss_feed_url()
+    def update_subscription_metadata(self):
+        subscriptions = self.subscription_with_missing_metadata()
         for subscription in subscriptions:
             if not subscription:
                 return None
-            subscription.rss_feed_url = obtain_feed_url.fetch_rss_feed(subscription)
+            subscription.rss_feed_url = obtain_channel_metadata.fetch_rss_feed(subscription)
+            subscription.title = obtain_channel_metadata.fetch_channel_title(subscription)
             self.session.commit()
             print(f"Updating subscription RSS URL for channel {subscription.title}")
 
-    def all_pending_videos_per_policy(self, subscription: Subscription, policy: Policy) -> List[Video]:
+    # We should get failed videos, but respect the failed download count limit
+    def all_pending_videos_per_policy(self, subscription: Subscription) -> List[Video]:
+        policy = self.get_policy_for_subscription(subscription)
         limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
         return self.session.query(Video) \
             .filter(subscription.id == subscription.id) \
             .filter(Video.created_at < limit_date) \
+            .filter(Video.status == VideoStatus.PENDING) \
             .all()
 
-        # return self.session.query(Video).filter_by(status=VideoStatus.PENDING).all()
-        pass
+    def exclude_videos_per_policy(self, subscription: Subscription):
+        policy = self.get_policy_for_subscription(subscription)
+        limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
+        to_exclude = self.session.query(Video) \
+            .filter(subscription.id == subscription.id) \
+            .filter(Video.created_at > limit_date) \
+            .all()
+        for video in to_exclude:
+            self.set_video_status(video, VideoStatus.EXCLUDED)
+
+    def add_videos(self, video_list: List[Video]) -> None:
+        for vidio in video_list:
+            self.add_video(vidio)
 
     def add_video(self, video: Video):
-        self.session.add(video)
-        self.session.commit()
-        print(f"Adding Video: {video.title}")
+        video_exists = self.session.query(Video).filter_by(url=video.url).count() > 0
+
+        if not video_exists:
+            self.session.add(video)
+            self.session.commit()
+            print(f"Adding Video: {video.title}")
 
     def recreate_database(self):
         Base.metadata.reflect(self.engine)
