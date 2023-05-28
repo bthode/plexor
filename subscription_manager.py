@@ -60,7 +60,7 @@ class SubscriptionManager:
         limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
         return self.session.query(Video) \
             .filter(subscription.id == subscription.id) \
-            .filter(Video.created_at < limit_date) \
+            .filter(Video.created_at > limit_date) \
             .filter(Video.status == VideoStatus.PENDING) \
             .all()
 
@@ -69,7 +69,7 @@ class SubscriptionManager:
         limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
         to_exclude = self.session.query(Video) \
             .filter(subscription.id == subscription.id) \
-            .filter(Video.created_at > limit_date) \
+            .filter(Video.created_at < limit_date) \
             .all()
         for video in to_exclude:
             self.set_video_status(video, VideoStatus.EXCLUDED)
