@@ -1,6 +1,4 @@
-This is a Command Line Interface (CLI) application that allows you to create, manage, and monitor your YouTube
-subscriptions. The app is written in Python and uses the YouTube Data API to retrieve information about channels and
-videos.
+This application lets you download a subset of a YouTube channel's videos per a retention policy. The app is written in Python and uses the public YouTube RSS Feed to retrieve channels and videos information.
 
 ## Prerequisites
 
@@ -27,7 +25,6 @@ The CLI app has the following commands:
 - `run` - Runs the subscriber application
 - `help` - Shows the help message
 
-This will add a subscription for the channel with the specified URL to the SQLite database.
 
 ### Create a Database
 
@@ -55,12 +52,14 @@ To add a new subscription to your YouTube channel, use the `add-subscription` co
 channel URL as an argument:
 
 ```
-python main.py add-subscription --channel https://www.youtube.com/channel/UC-lHJZR3Gqxm24_Vd_AJ5Yw
+python main.py add-subscription --channel <CHANNEL_URL>
 ```
+
+This will add a subscription for the channel with the specified URL to the SQLite database.
 
 ### Run the Application
 
-To download videos per the subscription retention policy, use the `run` command:
+To download videos per each subscription retention policy, use the `run` command:
 
 ```
 python main.py run
