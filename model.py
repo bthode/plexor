@@ -39,6 +39,13 @@ class Video(Base):
     subscription = relationship('Subscription', back_populates='videos')
     created_at = Column(DateTime, nullable=False)
     download_attempts = Column(Integer)
+    saved_path = Column(String)
+
+    def delete_video_file(self):
+        if self.saved_path:
+            # os.remove(self.saved_path)
+            self.saved_path = self.saved_path
+            print(f"Deleting file {self.saved_path}")
 
 
 class Subscription(Base):
@@ -50,3 +57,15 @@ class Subscription(Base):
     last_queried = Column(DateTime)
     videos = relationship('Video', back_populates='subscription')
     policy = relationship('Policy', back_populates='subscription', uselist=False)
+
+
+class Setting(Base):
+    __tablename__ = 'settings'
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(50), unique=True, nullable=False)
+    value = Column(String, nullable=False)
+    value_type = Column(String(20), nullable=False)
+
+    def __repr__(self):
+        return "<Setting(key='%s', value='%s', value_type='%s')>" % (self.key, self.value, self.value_type)

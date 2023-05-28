@@ -1,17 +1,16 @@
-import time
 import random
+
+
 # import yt_dlp
 
 
-def fetch_video_url(video):
-    print(f' Downloading video {video.title} at {video.url}')
-    time.sleep(.5)
+def fetch_video_url(download_path, video):
+    print(f' Downloading video {video.title} to {download_path}/{video.title}')
     if random.random() < 0.5:
-        return True
+        saved_path = "/path/filename"
+        return True, saved_path
     else:
-        return False
-
-
+        return False, None
 
     # ydl_opts = {
     #     'outtmpl': '%(title)s.%(ext)s',

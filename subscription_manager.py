@@ -1,14 +1,25 @@
+from datetime import datetime, timedelta
 from typing import List
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import obtain_feed_url
-from model import Base, VideoStatus
+from model import Base, VideoStatus, Setting, Policy, Retention
 from model import Video, Subscription
 
 
 class SubscriptionManager:
+    def delete_by_date(self, videos: List[Video], policy: Policy):
+        for video in videos:
+            if video.created_at < datetime.now() - timedelta(days=policy.days_to_retain):
+                self.set_video_status(video, VideoStatus.DELETED)
+                video.delete_video_file()
+
+    retention = {
+        Retention.DATE_BASED: delete_by_date,
+    }
+
     def __init__(self) -> None:
         """Initialize the SubscriptionManager with a database engine."""
         self.subscriptions = set()
@@ -36,12 +47,18 @@ class SubscriptionManager:
         for subscription in subscriptions:
             if not subscription:
                 return None
-            subscription.rss_feed_url = obtain_feed_url.fetch_rssfeed(subscription)
+            subscription.rss_feed_url = obtain_feed_url.fetch_rss_feed(subscription)
             self.session.commit()
             print(f"Updating subscription RSS URL for channel {subscription.title}")
 
-    def all_pending_videos(self) -> List[Video]:
-        return self.session.query(Video).filter_by(status=VideoStatus.PENDING).all()
+    def all_pending_videos_per_policy(self, subscription: Subscription, policy: Policy) -> List[Video]:
+        limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
+        return self.session.query(Video) \
+            .filter(subscription.id == subscription.id) \
+            .filter(Video.created_at < limit_date) \
+            .all()
+
+        # return self.session.query(Video).filter_by(status=VideoStatus.PENDING).all()
         pass
 
     def add_video(self, video: Video):
@@ -57,7 +74,53 @@ class SubscriptionManager:
     def set_video_status(self, video: Video, status: VideoStatus) -> None:
         video.status = status
         self.session.commit()
-        print(f"Setting video {video.title} to {status}")
+        print(f"Setting video {video.title} to {status.name}")
 
     def parse_xml(self):
         pass
+
+    def add_setting(self, key: str, value, datatype):
+        setting = Setting(key=key, value=value, value_type=datatype)
+        self.session.add(setting)
+        self.session.commit()
+
+    def get_download_location(self):
+        setting = self.session.query(Setting).filter_by(key="download_location").first()
+        if setting is not None:
+            return setting.value
+        else:
+            return None
+
+    def get_all_subscriptions(self):
+        return self.session.query(Subscription).all()
+
+    # session.query(Subscription).filter_by(id=<subscription_id>).first()
+    def get_policy_for_subscription(self, subscription: Subscription) -> Policy:
+        return self.session.query(Policy).filter_by(id=subscription.id).first()
+
+    def get_downloaded_videos_for_subscription(self, subscription: Subscription) -> List[Video]:
+        return self.session.query(Video) \
+            .filter_by(subscription_id=subscription.id) \
+            .filter_by(status=VideoStatus.COMPLETE) \
+            .all()
+
+    def get_videos_to_be_deleted(self, subscription: List[Subscription]):
+        for s in subscription:
+            policy = self.get_policy_for_subscription(s)
+            videos = self.get_downloaded_videos_for_subscription(s)
+            retention_strategy = self.retention.get(Retention.DATE_BASED)
+            if retention_strategy:
+                retention_strategy(
+                    self=self,
+                    videos=videos,
+                    policy=policy
+                )
+
+    def set_video_datetime_to_past(self):
+        video = self.session.query(Video).first()
+        video.created_at = datetime.now() - timedelta(days=30)  # Magic Number
+        self.session.commit()
+
+    def set_video_saved_path(self, video: Video, path: str) -> None:
+        video.saved_path = path
+        self.session.commit()
