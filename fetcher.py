@@ -1,26 +1,23 @@
 import os
 import xml.etree.ElementTree as ElementTree
 from datetime import datetime
-from typing import List
+from typing import List, Union
 from urllib.request import urlopen
 
 import yt_dlp
 
+import config
 from model import Video, Subscription, VideoStatus
 
 
-# import yt_dlp
-
-# from urllib.request import urlopen
-
-def download_video(download_path: str, video: Video) -> str:
+def download_video(download_path: str, video: Video, dry_run: bool) -> Union[tuple[bool, str], bool]:
     ydl_opts = {
         'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s')
     }
-    url = video.url
+    should_download = not dry_run
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
+            info_dict = ydl.extract_info(video.url, download=should_download)
             video_title = ydl.prepare_filename(info_dict)
             file_path = os.path.join(os.getcwd(), video_title)
             return True, file_path
@@ -30,25 +27,22 @@ def download_video(download_path: str, video: Video) -> str:
 
 
 def obtain_subscription_videos(subscription: Subscription) -> List[Video]:
-
-    url = subscription.rss_feed_url
-
-    response = urlopen(url)
+    response = urlopen(subscription.rss_feed_url)
     xml_content = response.read()
     root = ElementTree.fromstring(xml_content)
-    entries = root.findall(".//{http://www.w3.org/2005/Atom}entry")
+    entries = root.findall(f".//{config.entry}")
 
     video_list = []
 
     for entry in entries:
         video = Video(
-            url=entry.find("{http://www.w3.org/2005/Atom}link[@rel='alternate']").get('href'),
+            url=entry.find(config.entry_link).get('href'),
             status=VideoStatus.PENDING,
             download_attempts=0,
             subscription=subscription,
-            title=entry.findtext("{http://www.w3.org/2005/Atom}title"),
-            created_at=datetime.strptime(entry.find("{http://www.w3.org/2005/Atom}published").text,
-                                         "%Y-%m-%dT%H:%M:%S%z")
+            title=entry.findtext(config.entry_title),
+            created_at=datetime.strptime(entry.find(config.entry_published).text,
+                                         config.iso_8601_tz)
         )
         video_list.append(video)
 

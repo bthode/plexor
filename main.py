@@ -1,104 +1,87 @@
 import argparse
+import logging
 import os
-import re
 
+from prettytable import PrettyTable
+
+import dao
 import fetcher
-from model import VideoStatus, Subscription, Policy, Retention
-from subscription_manager import SubscriptionManager
+from dao import SubscriptionManager
+from model import VideoStatus, Subscription, Policy, Retention, Video
 
-CHANNEL_URL = './/{http://www.w3.org/2005/Atom}link[@rel="alternate"]'
+logging.basicConfig(level=logging.INFO)
 
-CHANNEL_NAME = '{http://www.w3.org/2005/Atom}author/{http://www.w3.org/2005/Atom}name'
-
-ATOM_LINK_REL_ALTERNATE_ = "{http://www.w3.org/2005/Atom}link[@rel='alternate']"
-
-ORG_ATOM_TITLE = "{http://www.w3.org/2005/Atom}title"
-
-database_file = "database.db"
-
-
-def delete_database():
-    if os.path.isfile(database_file):
-        os.remove(database_file)
-        print('Deleting database...')
-    else:
-        print("Error: file not found.")
-
-
-def create_database():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    database_path = os.path.join(script_dir, database_file)
-
-    if os.path.isfile(database_path):
-        print('Database file already exists')
-    else:
-        # Create the database if it doesn't exist
-        manager.recreate_database()
-        print('Creating database...')
-
+download_path = os.getcwd()  # download_path = manager.get_download_location()
 
 if __name__ == '__main__':
-    manager = SubscriptionManager(database_file)
+    manager = SubscriptionManager()
+
     parser = argparse.ArgumentParser()
-
-    download_path = os.getcwd()  # download_path = manager.get_download_location()
-
-    parser.add_argument('command', choices=['create-database', 'delete-database', 'add-subscription', 'run', 'help'],
-                        help='Command to execute')
-
-    parser.add_argument('--channel', help='Link to the Youtube channel URL')
-
+    cmd_parser = parser.add_subparsers(dest="command")
+    create_db_parser = cmd_parser.add_parser("create-database", help="Create a new database")
+    delete_db_parser = cmd_parser.add_parser("delete-database", help="Delete the current database")
+    add_sub_parser = cmd_parser.add_parser("add-subscription", help="Add a new subscription")
+    add_sub_parser.add_argument("channel", type=str, help="The URL of the channel to subscribe to")
+    print_subs_parser = cmd_parser.add_parser("print-subscriptions", help="Print a list of all subscriptions")
+    print_videos_parser = cmd_parser.add_parser("print-videos", help="Print a list of all videos")
+    run_parser = cmd_parser.add_parser("run", help="Process videos for both download and delete")
+    run_parser.add_argument("--dry-run", help="Skip downloading videos, but perform every other action as normal", action="store_true")
+    help_parser = cmd_parser.add_parser("help", help="Show help information")
     args = parser.parse_args()
 
-    if args.command == 'create-database':
-        create_database()
-
-    elif args.command == 'delete-database':
-        print('Deleting the database...')
-        delete_database()
-
-    elif args.command == 'add-subscription':
-        print('Adding a subscription...')
-        subscription_url = args.channel
-        if not subscription_url:
-            print('Error: Subscription URL is null')
-            exit()
-            # TODO: Looks like we're still adding invalid subscription urls
-        valid_url = True
-            #re.match(r'^(https?\:\/\/)?(www\.youtube\.com|youtube\.com)\/(user\/.+|channel\/.+|c\/.+)$',
-                             # subscription_url)
-        subscription = Subscription(
-            url=subscription_url,
-            policy=Policy(
-                type=Retention.DATE_BASED,
-                days_to_retain=7
+    if args.command == "create-database":
+        manager.create_database()
+    elif args.command == "delete-database":
+        dao.delete_database()
+    elif args.command == "add-subscription":
+        if args.channel:
+            subscription_url = args.channel
+            if not subscription_url:
+                print('Error: Subscription URL is null')
+                exit()
+            subscription = Subscription(
+                url=subscription_url,
+                policy=Policy(
+                    type=Retention.DATE_BASED,
+                    days_to_retain=7
+                )
             )
-        )
-        manager.add_subscription(subscription)
-        print(args.channel)
+            manager.add_subscription(subscription)
+        else:
+            print("Please specify a channel")
+    elif args.command == "print-subscriptions":
+        table = PrettyTable()
+        table.field_names = [Subscription.id.name, Subscription.title.name, Subscription.rss_feed_url.name,
+                             Subscription.url.name]
+        subscriptions = manager.get_all_subscriptions()
+        for subscription in subscriptions:
+            table.add_row([subscription.id, subscription.title, subscription.rss_feed_url, subscription.url])
+        print(table)
 
-        if not valid_url:
-            print('Error: Invalid YouTube channel URL')
-            exit()
+    elif args.command == "print-videos":
+        table = PrettyTable()
+        table.field_names = [Video.id, Video.title, Video.url, Video.status, Video.saved_path]
+        videos = manager.get_all_videos()
+        for video in videos:
+            table.add_row([video.id, video.title, video.url, video.status.name, video.saved_path])
+        print(table)
 
-    elif args.command == 'run':
-        if not os.path.isfile(database_file):
-            print("Database does not exist. Exiting.")
-            exit()
-
+    elif args.command == "run":
+        dry_run = False
+        if args.dry_run:
+            dry_run = True
         manager.update_subscription_metadata()
         subscriptions = manager.get_all_subscriptions()
 
         for subscription in manager.get_all_subscriptions():
             videos = fetcher.obtain_subscription_videos(subscription)
-            # TODO: Exclude EXCLUDED videos from processing to start with...
             manager.add_videos(videos)
             manager.exclude_videos_per_policy(subscription)
 
             for video in manager.all_pending_videos_per_policy(subscription):
                 print(f"--> Video: ID={video.id} Title={video.title} Status={video.status}")
                 manager.set_video_status(video, VideoStatus.IN_PROGRESS)
-                success, filepath = fetcher.download_video(download_path, video)
+                success, filepath = fetcher.download_video(download_path, video, dry_run)
                 if success:
                     video.status = VideoStatus.COMPLETE
                     manager.set_video_status(video, VideoStatus.COMPLETE)
@@ -109,5 +92,5 @@ if __name__ == '__main__':
         # TODO Need to ensure we're setting videos to excluded after they are outside of the retention policy
         # TODO Also need to delete old videos
 
-    elif args.command == 'help':
-        parser.print_help()
+    if not args.command:
+        print("Use -h or --help to see commands")

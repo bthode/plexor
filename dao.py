@@ -1,33 +1,56 @@
+import os
 from datetime import datetime, timedelta
 from typing import List
 
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 
+import config
 import obtain_channel_metadata
 from model import Base, VideoStatus, Setting, Policy, Retention
 from model import Video, Subscription
 
 
+def does_database_exist() -> bool:
+    return os.path.isfile(config.database_path)
+
+
+def delete_database():
+    if does_database_exist():
+        os.remove(config.database_path)
+        print('Deleting database...')
+    else:
+        print("Error: No database file found")
+
+
 class SubscriptionManager:
+
+    def create_database(self):
+        if does_database_exist():
+            print('Database file already exists')
+        else:
+            Base.metadata.reflect(self.engine)
+            Base.metadata.drop_all(self.engine, checkfirst=True)
+            Base.metadata.create_all(self.engine)
+            print("Database created...")
+
     def delete_by_date(self, videos: List[Video], policy: Policy):
         for video in videos:
             if video.created_at < datetime.now() - timedelta(days=policy.days_to_retain):
                 self.set_video_status(video, VideoStatus.DELETED)
                 video.delete_video_file()
 
+    # Mapping to delete_by_date method call.
     retention = {
         Retention.DATE_BASED: delete_by_date,
     }
 
-    def __init__(self, database_file) -> None:
-        """Initialize the SubscriptionManager with a database engine."""
-        self.subscriptions = set()
+    def __init__(self) -> None:
+        self.engine = create_engine('sqlite:///' + config.database_file)
+        if not does_database_exist():
+            print("Database doesn't exist yet")
+            self.create_database()
 
-        # Create an engine to connect to the database
-        self.engine = create_engine('sqlite:///' + database_file)
-
-        # Create a session
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         self.Base = Base
@@ -49,6 +72,7 @@ class SubscriptionManager:
         for subscription in subscriptions:
             if not subscription:
                 return None
+            # TODO: Don't let dao make any network calls...
             subscription.rss_feed_url = obtain_channel_metadata.fetch_rss_feed(subscription)
             subscription.title = obtain_channel_metadata.fetch_channel_title(subscription)
             self.session.commit()
@@ -64,12 +88,14 @@ class SubscriptionManager:
             .filter(Video.status == VideoStatus.PENDING) \
             .all()
 
+    # TODO: When should videos be set to excluded and in what starting states?
     def exclude_videos_per_policy(self, subscription: Subscription):
         policy = self.get_policy_for_subscription(subscription)
         limit_date = datetime.now() - timedelta(days=policy.days_to_retain)
         to_exclude = self.session.query(Video) \
             .filter(subscription.id == subscription.id) \
             .filter(Video.created_at < limit_date) \
+            .filter(Video.status != VideoStatus.EXCLUDED) \
             .all()
         for video in to_exclude:
             self.set_video_status(video, VideoStatus.EXCLUDED)
@@ -85,11 +111,6 @@ class SubscriptionManager:
             self.session.add(video)
             self.session.commit()
             print(f"Adding Video: {video.title}")
-
-    def recreate_database(self):
-        Base.metadata.reflect(self.engine)
-        Base.metadata.drop_all(self.engine, checkfirst=True)
-        Base.metadata.create_all(self.engine)
 
     def set_video_status(self, video: Video, status: VideoStatus) -> None:
         video.status = status
@@ -114,6 +135,9 @@ class SubscriptionManager:
     def get_all_subscriptions(self):
         return self.session.query(Subscription).all()
 
+    def get_all_videos(self):
+        return self.session.query(Video).all()
+
     # session.query(Subscription).filter_by(id=<subscription_id>).first()
     def get_policy_for_subscription(self, subscription: Subscription) -> Policy:
         return self.session.query(Policy).filter_by(id=subscription.id).first()
@@ -131,7 +155,6 @@ class SubscriptionManager:
             retention_strategy = self.retention.get(Retention.DATE_BASED)
             if retention_strategy:
                 retention_strategy(
-                    self=self,
                     videos=videos,
                     policy=policy
                 )

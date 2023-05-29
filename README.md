@@ -1,4 +1,4 @@
-This application lets you download a subset of a YouTube channel's videos per a retention policy. The app is written in Python and uses the public YouTube RSS Feed to retrieve channels and videos information.
+This application lets you download a "rolling window" of a YouTube channel's videos per a retention policy. The app is written in Python and uses the public YouTube RSS Feed to retrieve channels and videos information.
 
 ## Prerequisites
 
@@ -52,15 +52,20 @@ To add a new subscription to your YouTube channel, use the `add-subscription` co
 channel URL as an argument:
 
 ```
-python main.py add-subscription --channel <CHANNEL_URL>
+python main.py add-subscription <CHANNEL_URL>
 ```
 
 This will add a subscription for the channel with the specified URL to the SQLite database.
 
 ### Run the Application
 
-To download videos per each subscription retention policy, use the `run` command:
+To download and delete videos per each subscription retention policy, use the `run` command:
 
 ```
 python main.py run
+```
+
+To avoid actually downloading any videos use the --dry-run flag. Note that this still updates all the video metadata and will set videos as complete with the expected path.
+```
+python main.py run --dry-run
 ```

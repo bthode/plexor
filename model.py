@@ -48,6 +48,11 @@ class Video(Base):
             self.saved_path = self.saved_path
             print(f"Deleting file {self.saved_path}")
 
+    def __str__(self):
+        return f"Video(url={self.url}, status={self.status}, " \
+               f"download_attempts={self.download_attempts}, subscription={self.subscription}," \
+               f"title={self.title}, created_at={self.created_at})"
+
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
