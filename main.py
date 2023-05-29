@@ -26,7 +26,10 @@ def delete_database():
 
 
 def create_database():
-    if os.path.isfile(database_file):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    database_path = os.path.join(script_dir, database_file)
+
+    if os.path.isfile(database_path):
         print('Database file already exists')
     else:
         # Create the database if it doesn't exist
@@ -60,8 +63,10 @@ if __name__ == '__main__':
         if not subscription_url:
             print('Error: Subscription URL is null')
             exit()
-        valid_url = re.match(r'^(https?\:\/\/)?(www\.youtube\.com|youtube\.com)\/(user\/.+|channel\/.+|c\/.+)$',
-                             subscription_url)
+            # TODO: Looks like we're still adding invalid subscription urls
+        valid_url = True
+            #re.match(r'^(https?\:\/\/)?(www\.youtube\.com|youtube\.com)\/(user\/.+|channel\/.+|c\/.+)$',
+                             # subscription_url)
         subscription = Subscription(
             url=subscription_url,
             policy=Policy(
@@ -86,6 +91,7 @@ if __name__ == '__main__':
 
         for subscription in manager.get_all_subscriptions():
             videos = fetcher.obtain_subscription_videos(subscription)
+            # TODO: Exclude EXCLUDED videos from processing to start with...
             manager.add_videos(videos)
             manager.exclude_videos_per_policy(subscription)
 

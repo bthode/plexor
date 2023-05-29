@@ -2,6 +2,7 @@ import os
 import xml.etree.ElementTree as ElementTree
 from datetime import datetime
 from typing import List
+from urllib.request import urlopen
 
 import yt_dlp
 
@@ -29,16 +30,11 @@ def download_video(download_path: str, video: Video) -> str:
 
 
 def obtain_subscription_videos(subscription: Subscription) -> List[Video]:
-    #
-    #     # url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC-UZjHl2kZ-6XKBLgbFgGAQ"
-    #     #
-    #     # response = urlopen(url)
-    #     # xml_content = response.read()
 
-    file_path = os.path.expanduser("~/tmp/output.xml")
-    with open(file_path, "rb") as f:
-        xml_content = f.read()
+    url = subscription.rss_feed_url
 
+    response = urlopen(url)
+    xml_content = response.read()
     root = ElementTree.fromstring(xml_content)
     entries = root.findall(".//{http://www.w3.org/2005/Atom}entry")
 
