@@ -25,7 +25,10 @@ if __name__ == '__main__':
     print_subs_parser = cmd_parser.add_parser("print-subscriptions", help="Print a list of all subscriptions")
     print_videos_parser = cmd_parser.add_parser("print-videos", help="Print a list of all videos")
     run_parser = cmd_parser.add_parser("run", help="Process videos for both download and delete")
-    run_parser.add_argument("--dry-run", help="Skip downloading videos, but perform every other action as normal", action="store_true")
+    run_parser.add_argument("--download-path", type=str,
+                            help="Provide a download path instead of the current working directory")
+    run_parser.add_argument("--dry-run", help="Skip downloading videos, but perform every other action as normal",
+                            action="store_true")
     help_parser = cmd_parser.add_parser("help", help="Show help information")
     args = parser.parse_args()
 
@@ -70,6 +73,9 @@ if __name__ == '__main__':
         dry_run = False
         if args.dry_run:
             dry_run = True
+        if args.download_path:
+            download_path = args.download_path
+
         manager.update_subscription_metadata()
         subscriptions = manager.get_all_subscriptions()
 

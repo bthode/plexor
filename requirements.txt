@@ -9,3 +9,4 @@ yt-dlp>=2023.3.4
 prettytable>=3.7.0
 
 PlexAPI>=4.13.4
+pytest>=7.3.1
