@@ -10,14 +10,15 @@ import config
 from model import Video, Subscription, VideoStatus
 
 
-def download_video(download_path: str, video: Video, dry_run: bool) -> Union[tuple[bool, str], bool]:
+def download_video(download_path: str, url: str, dry_run: bool) -> Union[tuple[bool, str], bool]:
     ydl_opts = {
-        'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s')
+        'writeinfojson': True,
+        'outtmpl': os.path.join(download_path, '%(uploader)s/%(title)s-%(id)s')
     }
     should_download = not dry_run
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(video.url, download=should_download)
+            info_dict = ydl.extract_info(url, download=should_download)
             video_title = ydl.prepare_filename(info_dict)
             file_path = os.path.join(os.getcwd(), video_title)
             return True, file_path

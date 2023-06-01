@@ -87,7 +87,7 @@ if __name__ == '__main__':
             for video in manager.all_pending_videos_per_policy(subscription):
                 print(f"--> Video: ID={video.id} Title={video.title} Status={video.status}")
                 manager.set_video_status(video, VideoStatus.IN_PROGRESS)
-                success, filepath = fetcher.download_video(download_path, video, dry_run)
+                success, filepath = fetcher.download_video(download_path, video.url, dry_run)
                 if success:
                     video.status = VideoStatus.COMPLETE
                     manager.set_video_status(video, VideoStatus.COMPLETE)
